@@ -1,78 +1,39 @@
-import json
+import json 
 import time
-from pathlib import Path
+from confluent_kafka import Producer
 
-from kafka import KafkaProducer
-from kafka.errors import KafkaError
+KAFKA_BROKER = "localhost:9092"
+TOPIC_NAME = "pubmed_topic"
 
-KAFKA_SERVER = "localhost:9092"
-KAFKA_TOPIC = "pubmed-topic"
-DATA_FILE = Path(__file__).parent / "pubmed_data.json"
+def delivery_report(err, msg):
+    if err is not None:
+        print(f"Failed to deliver message: {err}")
+    else:
+        print(f"Message delivered to {msg.topic()} [{msg.partition()}] at offset {msg.offset()}")
 
+def main():
+    # creating a Kafka producer instance
+    conf = {'bootstrap.servers': KAFKA_BROKER}
+    producer = Producer(conf)
 
-def connect_to_kafka(max_attempts=10):
-    for attempt in range(1, max_attempts + 1):
-        try:
-            producer = KafkaProducer(
-                bootstrap_servers=[KAFKA_SERVER],
-                key_serializer=lambda key: key.encode("utf-8"),
-                value_serializer=lambda value: json.dumps(
-                    value
-                ).encode("utf-8"),
-                acks="all",
-                retries=5,
-            )
+    count = 0
+    print(f"Starting to send records to Kafka topic '{TOPIC_NAME}'...")
 
-            print("Connected to Kafka.")
-            return producer
+    with open("pubmed_data.json", "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
 
-        except KafkaError:
-            print(
-                f"Kafka is not ready. "
-                f"Attempt {attempt}/{max_attempts}..."
-            )
-            time.sleep(3)
-
-    raise RuntimeError("Could not connect to Kafka.")
+            record = json.loads(line)   
+            payload = json.dumps(record).encode('utf-8')
+            producer.produce(TOPIC_NAME, value=payload, callback=delivery_report)
+            producer.poll(0)  # Trigger delivery report callbacks
+            count += 1
 
 
-def stream_records():
-    producer = connect_to_kafka()
-    sent = 0
-
-    try:
-        with DATA_FILE.open("r", encoding="utf-8") as file:
-            for line in file:
-                if not line.strip():
-                    continue
-
-                record = json.loads(line)
-                pmid = str(record["pmid"])
-
-                producer.send(
-                    KAFKA_TOPIC,
-                    key=pmid,
-                    value=record,
-                )
-
-                sent += 1
-
-                if sent % 100 == 0:
-                    producer.flush()
-                    print(f"Sent {sent} records...")
-
-                # Simulates records arriving as a stream.
-                time.sleep(0.01)
-
-        producer.flush()
-        print(
-            f"Finished. Sent {sent} records "
-            f"to {KAFKA_TOPIC}."
-        )
-
-    finally:
-        producer.close()
-
+    producer.flush()  # Wait for all messages to be delivered
+    print(f"All {count} records have been successfully sent to Kafka!")
 
 if __name__ == "__main__":
-    stream_records()
+    main()
