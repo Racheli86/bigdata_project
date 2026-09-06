@@ -5,7 +5,7 @@ from elasticsearch import Elasticsearch, helpers
 from kafka import KafkaConsumer
 from kafka.errors import KafkaError
 
-KAFKA_TOPIC = "pubmed-topic"
+KAFKA_TOPIC = "pubmed_topic"
 KAFKA_SERVER = "localhost:9092"
 ELASTICSEARCH_HOST = "http://localhost:9200"
 INDEX_NAME = "pubmed-index"
@@ -116,7 +116,7 @@ def connect_to_kafka(max_attempts=20):
             consumer = KafkaConsumer(
                 KAFKA_TOPIC,
                 bootstrap_servers=[KAFKA_SERVER],
-                group_id="pubmed-elasticsearch-indexer",
+                group_id="pubmed-elasticsearch-indexer_v2",
                 auto_offset_reset="earliest",
                 enable_auto_commit=True,
                 value_deserializer=lambda value: json.loads(
